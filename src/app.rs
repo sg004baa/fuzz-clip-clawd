@@ -7,6 +7,7 @@ use crate::config::Config;
 use crate::fuzzy;
 use crate::history::History;
 use crate::hotkey;
+use crate::tray;
 
 pub struct ClipboardHistoryApp {
     history: Arc<Mutex<History>>,
@@ -15,6 +16,8 @@ pub struct ClipboardHistoryApp {
     visible: Arc<Mutex<bool>>,
     config: Config,
     initialized: bool,
+    was_visible: bool,
+    _tray: Option<tray_icon::TrayIcon>,
 }
 
 impl ClipboardHistoryApp {
@@ -30,13 +33,15 @@ impl ClipboardHistoryApp {
             visible,
             config,
             initialized: false,
+            was_visible: false,
+            _tray: None,
         }
     }
 }
 
 impl eframe::App for ClipboardHistoryApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Start background threads on first frame
+        // Start background threads and tray on first frame (now we have the real Context)
         if !self.initialized {
             self.initialized = true;
 
@@ -49,29 +54,47 @@ impl eframe::App for ClipboardHistoryApp {
 
             // Start hotkey listener
             hotkey::start_listener(Arc::clone(&self.visible), ctx.clone());
+
+            // Build system tray with the real egui Context
+            self._tray = Some(tray::build_tray(Arc::clone(&self.visible), ctx.clone()));
         }
+
+        // Poll periodically to check visibility flag changes from hotkey/tray threads
+        ctx.request_repaint_after(std::time::Duration::from_millis(100));
 
         // Check visibility
         let is_visible = *self.visible.lock().unwrap();
-        if !is_visible {
-            // Hide the window by not rendering any UI
-            // Request repaint to check visibility flag changes
-            ctx.request_repaint_after(std::time::Duration::from_millis(100));
-            // Minimize or set as not visible - we handle this through viewport commands
+
+        if is_visible && !self.was_visible {
+            // Just became visible — show window, move to cursor, reset state
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+
+            // Move window near mouse cursor
+            if let Some(pos) = ctx.input(|i| i.pointer.latest_pos()) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                    egui::pos2(pos.x - 200.0, pos.y - 50.0).into(),
+                ));
+            }
+
+            self.search_query.clear();
+            self.selected_index = 0;
+        } else if !is_visible && self.was_visible {
+            // Just became hidden
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
-            return;
         }
 
-        // Show the window
-        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        self.was_visible = is_visible;
 
-        // Poll for repaint to keep checking visibility
-        ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        if !is_visible {
+            // Window is hidden — don't render UI but keep the loop alive
+            return;
+        }
 
         // Handle Escape key to hide
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             *self.visible.lock().unwrap() = false;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
             self.search_query.clear();
             self.selected_index = 0;
             return;
@@ -122,31 +145,38 @@ impl eframe::App for ClipboardHistoryApp {
             }
 
             // Scrollable entry list
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                for (i, (entry, _score)) in results.iter().enumerate() {
-                    let is_selected = i == self.selected_index;
+            if results.is_empty() {
+                ui.add_space(20.0);
+                ui.vertical_centered(|ui| {
+                    ui.label("No clipboard history yet. Copy some text!");
+                });
+            } else {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for (i, (entry, _score)) in results.iter().enumerate() {
+                        let is_selected = i == self.selected_index;
 
-                    // Truncate content for display (single line preview)
-                    let preview: String = entry
-                        .content
-                        .chars()
-                        .take(80)
-                        .map(|c| if c == '\n' || c == '\r' { ' ' } else { c })
-                        .collect();
+                        // Truncate content for display (single line preview)
+                        let preview: String = entry
+                            .content
+                            .chars()
+                            .take(80)
+                            .map(|c| if c == '\n' || c == '\r' { ' ' } else { c })
+                            .collect();
 
-                    let label = egui::SelectableLabel::new(is_selected, &preview);
-                    let response = ui.add(label);
+                        let label = egui::SelectableLabel::new(is_selected, &preview);
+                        let response = ui.add(label);
 
-                    if response.clicked() {
-                        selected_content = Some(entry.content.clone());
+                        if response.clicked() {
+                            selected_content = Some(entry.content.clone());
+                        }
+
+                        // Auto-scroll to selected item
+                        if is_selected {
+                            response.scroll_to_me(Some(egui::Align::Center));
+                        }
                     }
-
-                    // Auto-scroll to selected item
-                    if is_selected {
-                        response.scroll_to_me(Some(egui::Align::Center));
-                    }
-                }
-            });
+                });
+            }
 
             // Handle selection (set clipboard and hide)
             drop(history); // Release lock before clipboard operation
@@ -155,6 +185,7 @@ impl eframe::App for ClipboardHistoryApp {
                     let _ = clip.set_text(&content);
                 }
                 *self.visible.lock().unwrap() = false;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
                 self.search_query.clear();
                 self.selected_index = 0;
             }
