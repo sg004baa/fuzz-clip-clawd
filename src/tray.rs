@@ -42,6 +42,15 @@ pub fn build_tray(visible: Arc<Mutex<bool>>, ctx: eframe::egui::Context) -> Tray
                 if event.id() == &show_id {
                     let mut v = visible.lock().unwrap();
                     *v = !*v;
+                    let is_now_visible = *v;
+                    drop(v);
+
+                    // Same Windows fix as in hotkey.rs: directly show the window
+                    // so the egui event loop wakes up when the window was hidden.
+                    if is_now_visible {
+                        crate::platform::show_window_native();
+                    }
+
                     ctx.request_repaint();
                 } else if event.id() == &quit_id {
                     std::process::exit(0);

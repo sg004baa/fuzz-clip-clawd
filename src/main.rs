@@ -4,6 +4,7 @@ mod config;
 mod fuzzy;
 mod history;
 mod hotkey;
+mod platform;
 mod storage;
 mod tray;
 
