@@ -25,6 +25,17 @@ pub fn start_listener(visible: Arc<Mutex<bool>>, ctx: eframe::egui::Context) -> 
                         // Double-tap detected — toggle visibility
                         let mut v = vis.lock().unwrap();
                         *v = !*v;
+                        let is_now_visible = *v;
+                        drop(v);
+
+                        // On Windows, WM_PAINT is not delivered to hidden windows,
+                        // so request_repaint() alone cannot wake the egui event loop.
+                        // Call ShowWindow directly so the loop resumes and processes
+                        // the updated visibility flag.
+                        if is_now_visible {
+                            crate::platform::show_window_native();
+                        }
+
                         ctx.request_repaint();
                         *last = None; // Reset to avoid triple-tap
                         return;
