@@ -34,6 +34,10 @@ pub fn start_listener(visible: Arc<Mutex<bool>>, ctx: eframe::egui::Context) -> 
                         // the updated visibility flag.
                         if is_now_visible {
                             crate::platform::show_window_native();
+                        } else {
+                            // Hide immediately so the OS removes the window before
+                            // egui's next frame can flash a black clear-color.
+                            crate::platform::hide_window_native();
                         }
 
                         ctx.request_repaint();

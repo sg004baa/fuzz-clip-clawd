@@ -28,3 +28,27 @@ pub fn show_window_native() {
         }
     }
 }
+
+/// Hide the window immediately via Win32 `ShowWindow(SW_HIDE)`.
+///
+/// Called from the hotkey/tray threads before `request_repaint()` so the
+/// window disappears instantly, preventing egui's black clear-color from
+/// flashing on screen during the hide transition.
+///
+/// No-op on non-Windows platforms.
+pub fn hide_window_native() {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            FindWindowW, ShowWindow, SW_HIDE,
+        };
+
+        let title: Vec<u16> = "Clipboard History\0".encode_utf16().collect();
+        let hwnd = unsafe { FindWindowW(std::ptr::null(), title.as_ptr()) };
+        if hwnd != std::ptr::null_mut() {
+            unsafe {
+                ShowWindow(hwnd, SW_HIDE);
+            }
+        }
+    }
+}

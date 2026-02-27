@@ -49,6 +49,10 @@ pub fn build_tray(visible: Arc<Mutex<bool>>, ctx: eframe::egui::Context) -> Tray
                     // so the egui event loop wakes up when the window was hidden.
                     if is_now_visible {
                         crate::platform::show_window_native();
+                    } else {
+                        // Hide immediately so the OS removes the window before
+                        // egui's next frame can flash a black clear-color.
+                        crate::platform::hide_window_native();
                     }
 
                     ctx.request_repaint();
