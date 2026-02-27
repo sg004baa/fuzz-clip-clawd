@@ -1,3 +1,6 @@
+// Suppress the console window on Windows when launching the GUI executable.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 mod app;
 mod clipboard;
 mod config;

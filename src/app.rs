@@ -80,7 +80,9 @@ impl eframe::App for ClipboardHistoryApp {
             self.search_query.clear();
             self.selected_index = 0;
         } else if !is_visible && self.was_visible {
-            // Just became hidden
+            // Just became hidden — hide natively first to avoid a black flash
+            // before egui presents the final frame.
+            crate::platform::hide_window_native();
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
         }
 
@@ -94,6 +96,7 @@ impl eframe::App for ClipboardHistoryApp {
         // Handle Escape key to hide
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             *self.visible.lock().unwrap() = false;
+            crate::platform::hide_window_native();
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
             self.search_query.clear();
             self.selected_index = 0;
@@ -185,6 +188,7 @@ impl eframe::App for ClipboardHistoryApp {
                     let _ = clip.set_text(&content);
                 }
                 *self.visible.lock().unwrap() = false;
+                crate::platform::hide_window_native();
                 ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
                 self.search_query.clear();
                 self.selected_index = 0;
