@@ -20,7 +20,7 @@ pub fn show_window_native() {
         // Locate the main window by its title (set in eframe::run_native).
         let title: Vec<u16> = "Clipboard History\0".encode_utf16().collect();
         let hwnd = unsafe { FindWindowW(std::ptr::null(), title.as_ptr()) };
-        if hwnd != 0 {
+        if hwnd != std::ptr::null_mut() {
             unsafe {
                 ShowWindow(hwnd, SW_SHOW);
                 SetForegroundWindow(hwnd);
