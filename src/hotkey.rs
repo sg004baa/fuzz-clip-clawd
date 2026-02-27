@@ -8,45 +8,60 @@ use rdev::{listen, Event, EventType, Key};
 /// Detects Ctrl+Ctrl double-tap (two Ctrl presses within 300ms).
 pub fn start_listener(visible: Arc<Mutex<bool>>, ctx: eframe::egui::Context) -> thread::JoinHandle<()> {
     thread::spawn(move || {
+        // last_ctrl_press: timestamp of the previous genuine Ctrl tap.
         let last_ctrl_press: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
+        // ctrl_is_down: true while any Ctrl key is physically held.
+        // Used to ignore OS key-repeat events (KeyPress fires repeatedly while
+        // held, which would otherwise trigger a false double-tap after ~530 ms).
+        let ctrl_is_down: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+
         let last_ctrl = Arc::clone(&last_ctrl_press);
+        let is_down = Arc::clone(&ctrl_is_down);
         let vis = Arc::clone(&visible);
 
         let callback = move |event: Event| {
-            if let EventType::KeyPress(Key::ControlLeft) | EventType::KeyPress(Key::ControlRight) =
-                event.event_type
-            {
-                let mut last = last_ctrl.lock().unwrap();
-                let now = Instant::now();
-
-                if let Some(prev) = *last {
-                    let elapsed = now.duration_since(prev);
-                    if elapsed.as_millis() < 300 {
-                        // Double-tap detected — toggle visibility
-                        let mut v = vis.lock().unwrap();
-                        *v = !*v;
-                        let is_now_visible = *v;
-                        drop(v);
-
-                        // On Windows, WM_PAINT is not delivered to hidden windows,
-                        // so request_repaint() alone cannot wake the egui event loop.
-                        // Call ShowWindow directly so the loop resumes and processes
-                        // the updated visibility flag.
-                        if is_now_visible {
-                            crate::platform::show_window_native();
-                        } else {
-                            // Hide immediately so the OS removes the window before
-                            // egui's next frame can flash a black clear-color.
-                            crate::platform::hide_window_native();
-                        }
-
-                        ctx.request_repaint();
-                        *last = None; // Reset to avoid triple-tap
+            match event.event_type {
+                EventType::KeyPress(Key::ControlLeft)
+                | EventType::KeyPress(Key::ControlRight) => {
+                    // Ignore key-repeat events produced by holding the key.
+                    let mut down = is_down.lock().unwrap();
+                    if *down {
                         return;
                     }
-                }
+                    *down = true;
+                    drop(down);
 
-                *last = Some(now);
+                    let mut last = last_ctrl.lock().unwrap();
+                    let now = Instant::now();
+
+                    if let Some(prev) = *last {
+                        let elapsed = now.duration_since(prev);
+                        if elapsed.as_millis() < 300 {
+                            // Double-tap detected — toggle visibility
+                            let mut v = vis.lock().unwrap();
+                            *v = !*v;
+                            let is_now_visible = *v;
+                            drop(v);
+
+                            if is_now_visible {
+                                crate::platform::show_window_native();
+                            } else {
+                                crate::platform::hide_window_native();
+                            }
+
+                            ctx.request_repaint();
+                            *last = None; // Reset to avoid triple-tap
+                            return;
+                        }
+                    }
+
+                    *last = Some(now);
+                }
+                EventType::KeyRelease(Key::ControlLeft)
+                | EventType::KeyRelease(Key::ControlRight) => {
+                    *is_down.lock().unwrap() = false;
+                }
+                _ => {}
             }
         };
 
