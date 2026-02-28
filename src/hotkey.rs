@@ -6,7 +6,12 @@ use rdev::{listen, Event, EventType, Key};
 
 /// Start the global hotkey listener in a background thread.
 /// Detects Ctrl+Ctrl double-tap (two Ctrl presses within 300ms).
-pub fn start_listener(visible: Arc<Mutex<bool>>, ctx: eframe::egui::Context) -> thread::JoinHandle<()> {
+/// Also tracks global mouse cursor position into `cursor_pos`.
+pub fn start_listener(
+    visible: Arc<Mutex<bool>>,
+    ctx: eframe::egui::Context,
+    cursor_pos: Arc<Mutex<(f64, f64)>>,
+) -> thread::JoinHandle<()> {
     thread::spawn(move || {
         // last_ctrl_press: timestamp of the previous genuine Ctrl tap.
         let last_ctrl_press: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
@@ -18,9 +23,13 @@ pub fn start_listener(visible: Arc<Mutex<bool>>, ctx: eframe::egui::Context) -> 
         let last_ctrl = Arc::clone(&last_ctrl_press);
         let is_down = Arc::clone(&ctrl_is_down);
         let vis = Arc::clone(&visible);
+        let cur = Arc::clone(&cursor_pos);
 
         let callback = move |event: Event| {
             match event.event_type {
+                EventType::MouseMove { x, y } => {
+                    *cur.lock().unwrap() = (x, y);
+                }
                 EventType::KeyPress(Key::ControlLeft)
                 | EventType::KeyPress(Key::ControlRight) => {
                     // Ignore key-repeat events produced by holding the key.
