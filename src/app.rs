@@ -22,6 +22,7 @@ pub struct ClipboardHistoryApp {
     config: Config,
     initialized: bool,
     was_visible: bool,
+    focused_once: bool,
     _tray: Option<tray_icon::TrayIcon>,
     cursor_pos: Arc<Mutex<(f64, f64)>>,
     last_height: f32,
@@ -41,6 +42,7 @@ impl ClipboardHistoryApp {
             config,
             initialized: false,
             was_visible: false,
+            focused_once: false,
             _tray: None,
             cursor_pos: Arc::new(Mutex::new((0.0, 0.0))),
             last_height: 0.0,
@@ -76,6 +78,7 @@ impl eframe::App for ClipboardHistoryApp {
 
         if is_visible && !self.was_visible {
             // Just became visible — show window, move to cursor, reset state
+            self.focused_once = false;
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
 
@@ -112,6 +115,20 @@ impl eframe::App for ClipboardHistoryApp {
 
         if !is_visible {
             // Window is hidden — don't render UI but keep the loop alive
+            return;
+        }
+
+        // Track focus and hide window when it loses focus (e.g. click outside)
+        let has_focus = ctx.input(|i| i.viewport().focused.unwrap_or(false));
+        if has_focus {
+            self.focused_once = true;
+        } else if self.focused_once {
+            // Window had focus but lost it — hide
+            *self.visible.lock().unwrap() = false;
+            crate::platform::hide_window_native();
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+            self.search_query.clear();
+            self.selected_index = 0;
             return;
         }
 
