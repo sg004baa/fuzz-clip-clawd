@@ -77,7 +77,7 @@ impl eframe::App for ClipboardHistoryApp {
             let (cx, cy) = *self.cursor_pos.lock().unwrap();
             let cx = cx as f32;
             let cy = cy as f32;
-            let win_h = self.config.window_height;
+            let win_h = ctx.screen_rect().height();
             let screen_h = ctx
                 .input(|i| i.viewport().monitor_size)
                 .map(|s| s.y)
