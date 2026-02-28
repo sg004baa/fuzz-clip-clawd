@@ -9,6 +9,11 @@ use crate::history::History;
 use crate::hotkey;
 use crate::tray;
 
+const HEADER_HEIGHT: f32 = 56.0;
+const ROW_HEIGHT: f32 = 24.0;
+const MIN_HEIGHT: f32 = 80.0;
+const MAX_HEIGHT: f32 = 500.0;
+
 pub struct ClipboardHistoryApp {
     history: Arc<Mutex<History>>,
     search_query: String,
@@ -19,6 +24,7 @@ pub struct ClipboardHistoryApp {
     was_visible: bool,
     _tray: Option<tray_icon::TrayIcon>,
     cursor_pos: Arc<Mutex<(f64, f64)>>,
+    last_height: f32,
 }
 
 impl ClipboardHistoryApp {
@@ -37,6 +43,7 @@ impl ClipboardHistoryApp {
             was_visible: false,
             _tray: None,
             cursor_pos: Arc::new(Mutex::new((0.0, 0.0))),
+            last_height: 0.0,
         }
     }
 }
@@ -138,6 +145,20 @@ impl eframe::App for ClipboardHistoryApp {
             let history = self.history.lock().unwrap();
             let entries = history.entries();
             let results = fuzzy::search(&self.search_query, entries);
+
+            // Resize window height based on number of results
+            let desired_height = if results.is_empty() {
+                MIN_HEIGHT
+            } else {
+                (HEADER_HEIGHT + results.len() as f32 * ROW_HEIGHT).min(MAX_HEIGHT)
+            };
+            if (desired_height - self.last_height).abs() > 0.5 {
+                self.last_height = desired_height;
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(
+                    self.config.window_width,
+                    desired_height,
+                )));
+            }
 
             // Handle keyboard navigation
             let up = ctx.input(|i| i.key_pressed(egui::Key::ArrowUp));
