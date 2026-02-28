@@ -18,6 +18,7 @@ pub struct ClipboardHistoryApp {
     initialized: bool,
     was_visible: bool,
     _tray: Option<tray_icon::TrayIcon>,
+    cursor_pos: Arc<Mutex<(f64, f64)>>,
 }
 
 impl ClipboardHistoryApp {
@@ -35,6 +36,7 @@ impl ClipboardHistoryApp {
             initialized: false,
             was_visible: false,
             _tray: None,
+            cursor_pos: Arc::new(Mutex::new((0.0, 0.0))),
         }
     }
 }
@@ -52,8 +54,8 @@ impl eframe::App for ClipboardHistoryApp {
                 ctx.clone(),
             );
 
-            // Start hotkey listener
-            hotkey::start_listener(Arc::clone(&self.visible), ctx.clone());
+            // Start hotkey listener (also tracks global mouse cursor position)
+            hotkey::start_listener(Arc::clone(&self.visible), ctx.clone(), Arc::clone(&self.cursor_pos));
 
             // Build system tray with the real egui Context
             self._tray = Some(tray::build_tray(Arc::clone(&self.visible), ctx.clone()));
@@ -70,12 +72,11 @@ impl eframe::App for ClipboardHistoryApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
 
-            // Move window near mouse cursor
-            if let Some(pos) = ctx.input(|i| i.pointer.latest_pos()) {
-                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
-                    egui::pos2(pos.x - 200.0, pos.y - 50.0).into(),
-                ));
-            }
+            // Move window near mouse cursor using globally tracked position
+            let (cx, cy) = *self.cursor_pos.lock().unwrap();
+            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                egui::pos2(cx as f32 - 200.0, cy as f32 - 50.0),
+            ));
 
             self.search_query.clear();
             self.selected_index = 0;
