@@ -77,14 +77,14 @@ impl eframe::App for ClipboardHistoryApp {
             let (cx, cy) = *self.cursor_pos.lock().unwrap();
             let cx = cx as f32;
             let cy = cy as f32;
-            const WIN_H: f32 = 500.0;
+            let win_h = self.config.window_height;
             let screen_h = ctx
                 .input(|i| i.viewport().monitor_size)
                 .map(|s| s.y)
                 .unwrap_or(1080.0);
-            let y = if cy - 50.0 + WIN_H > screen_h {
+            let y = if cy - 50.0 + win_h > screen_h {
                 // Not enough space below — show window above the cursor
-                (cy - WIN_H).max(0.0)
+                (cy - win_h).max(0.0)
             } else {
                 cy - 50.0
             };
