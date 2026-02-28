@@ -72,10 +72,24 @@ impl eframe::App for ClipboardHistoryApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
 
-            // Move window near mouse cursor using globally tracked position
+            // Move window near mouse cursor using globally tracked position.
+            // If the window would extend below the screen, show it above the cursor instead.
             let (cx, cy) = *self.cursor_pos.lock().unwrap();
+            let cx = cx as f32;
+            let cy = cy as f32;
+            let win_h = ctx.screen_rect().height();
+            let screen_h = ctx
+                .input(|i| i.viewport().monitor_size)
+                .map(|s| s.y)
+                .unwrap_or(1080.0);
+            let y = if cy - 50.0 + win_h > screen_h {
+                // Not enough space below — show window above the cursor
+                (cy - win_h).max(0.0)
+            } else {
+                cy - 50.0
+            };
             ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
-                egui::pos2(cx as f32 - 200.0, cy as f32 - 50.0),
+                egui::pos2(cx - 200.0, y),
             ));
 
             self.search_query.clear();
